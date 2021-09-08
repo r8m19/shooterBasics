@@ -5,20 +5,24 @@ using UnityEngine;
 public class Shoot : MonoBehaviour
 {
     [SerializeField] GameObject prefab;
+    [SerializeField] Animator anim;
     [SerializeField] Transform posicionInicial;
-    [SerializeField] bool automatic, canShoot = true;
-    [SerializeField] float speed, bulletDuration, bulletFrequency;
-    [Range(1,0f)]
+    [SerializeField] bool automatic;
+    
+    [Range(1,16f)]
+    [SerializeField] int bulletsPerShot = 1;
+    [Range(1-0.000001f,0.000001f)]
     [SerializeField] float initialSpread = .25f;
     [Range(-1,1f)]
     [SerializeField] float spreadPerShot = 0;
-    [SerializeField] float maxSpread = 1;
-    [SerializeField] float minSpread = 0.05f;
-    [SerializeField] float spreadRecoveryDelay = 1;
-    [SerializeField] float spreadRecoveryTime = 1;
-    float shotsFiredRecently = 0, shootDelay = 0;
 
-    Coroutine spreadRecoveryDelayCoroutine, spreadRecoveryProcessCoroutine;
+    [SerializeField] float speed, bulletDuration, bulletFrequency, maxSpread = 1, minSpread = 0.05f, spreadRecoveryDelay = 1, spreadRecoveryTime = 1;
+
+    [SerializeField] AudioSource audioSource;
+    float shotsFiredRecently = 0, shootDelay = 0, canShoot, delayTimer;
+
+
+    Coroutine spreadRecoveryProcessCoroutine;
 
     [SerializeField] LayerMask hitable;
 
@@ -28,25 +32,31 @@ public class Shoot : MonoBehaviour
         }
     }
 
+    void Start() {
+        canShoot = Time.time;
+        delayTimer = Time.time;
+    }
+
     public void Disparar(){
         //RaycastHit output;
         //Physics.Raycast(Camera.main.ScreenPointToRay(posicionInicial.position), out output,100,hitable,QueryTriggerInteraction.Ignore);
-
-        if(canShoot){
+        canShoot = Time.time + 1/bulletFrequency;
+        for(int i = 0; i < bulletsPerShot; i++){
             GameObject bullet = Instantiate(prefab,posicionInicial.position,Quaternion.identity);
             bullet.GetComponent<Rigidbody>().velocity = ShootingSpread() * speed;
             Destroy(bullet,bulletDuration);
-            StartCoroutine(Delay());
-            if(spreadRecoveryProcessCoroutine != null){
-                StopCoroutine(spreadRecoveryProcessCoroutine);
-                spreadRecoveryProcessCoroutine = null;
-            }
-            if(spreadRecoveryDelayCoroutine != null){
-                StopCoroutine(spreadRecoveryDelayCoroutine);
-                spreadRecoveryDelayCoroutine = null;
-            }
-            shotsFiredRecently++;
         }
+        
+        delayTimer = Time.time + spreadRecoveryDelay;
+        if(spreadRecoveryProcessCoroutine != null){
+            StopCoroutine(spreadRecoveryProcessCoroutine);
+            spreadRecoveryProcessCoroutine = null;
+        }
+
+        if(SPREAD > minSpread && SPREAD < maxSpread)
+            shotsFiredRecently++;
+        anim.SetTrigger("Shoot");
+        audioSource.Play();
     }
 
     Vector3 ShootingSpread(){
@@ -61,35 +71,26 @@ public class Shoot : MonoBehaviour
 
     private void Update() {
         //print(SPREAD);
-        if(automatic && Input.GetMouseButton(0) || !automatic && Input.GetMouseButtonDown(0)){
+        if((automatic && Input.GetMouseButton(0) || !automatic && Input.GetMouseButtonDown(0)) && Time.time >= canShoot)
             Disparar();
-        }
-        else
-        {
-            if(spreadRecoveryDelayCoroutine == null) spreadRecoveryDelayCoroutine = StartCoroutine(SpreadRecoveryDelay());
-        }
+        
+        if(Time.time >= delayTimer)
+            spreadRecoveryProcessCoroutine = StartCoroutine(SpreadRecoveryProcess());
     }
 
-    IEnumerator SpreadRecoveryDelay(){
+    /*IEnumerator SpreadRecoveryDelay(){
         yield return new WaitForSeconds(spreadRecoveryDelay);
         spreadRecoveryProcessCoroutine = StartCoroutine(SpreadRecoveryProcess());
         spreadRecoveryDelayCoroutine = null;
-    }
+    }*/
 
     IEnumerator SpreadRecoveryProcess(){
         float shotsAtStart = shotsFiredRecently;
         while(shotsFiredRecently > 0){
-            shotsFiredRecently -= shotsAtStart/50;
-            print(shotsFiredRecently);
-            yield return new WaitForSeconds(spreadRecoveryTime/50);
+            shotsFiredRecently -= shotsAtStart/100;
+            yield return new WaitForSeconds(spreadRecoveryTime/100);
         }
         shotsFiredRecently = 0;
         spreadRecoveryProcessCoroutine = null;
-    }
-
-    IEnumerator Delay(){
-        canShoot = false;
-        if(bulletFrequency > 0) yield return new WaitForSeconds(1/bulletFrequency);
-        canShoot = true;
     }
 }
